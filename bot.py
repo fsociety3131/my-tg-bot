@@ -3,6 +3,7 @@ import sqlite3
 import uuid
 from datetime import datetime
 import asyncio
+import aiohttp
 
 from aiogram import Bot, Dispatcher, types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, LabeledPrice, PreCheckoutQuery
@@ -14,22 +15,23 @@ from aiogram import F
 # ============================================
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-if not BOT_TOKEN:
-    print("❌ BOT_TOKEN не найден!")
-    exit(1)
+
+# SQLite3 на VPS (файл)
+DB_PATH = os.getenv("DB_PATH", "avenddlc.db")
+
+# Ссылка на лоадер (можно на любой хостинг)
+LOADER_URL = os.getenv("LOADER_URL", "https://example.com/loader.exe")
 
 PRICE_STARS = 200
 PRODUCT_NAME = "AvendDLC Minecraft"
 PRODUCT_DESCRIPTION = "Чит для Minecraft 1.21.8 | Навсегда"
 
-LOADER_PATH = "loader.exe"
-
 # ============================================
-# БАЗА ДАННЫХ
+# БАЗА ДАННЫХ (SQLite3)
 # ============================================
 
 def init_db():
-    conn = sqlite3.connect('avenddlc.db')
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute('''
         CREATE TABLE IF NOT EXISTS users (
@@ -51,10 +53,10 @@ def init_db():
     ''')
     conn.commit()
     conn.close()
-    print("✅ База данных готова")
+    print(f"✅ База данных готова: {DB_PATH}")
 
 def save_user(user_id, username, license_key):
-    conn = sqlite3.connect('avenddlc.db')
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute('INSERT OR REPLACE INTO users VALUES (?, ?, ?, ?, ?)',
               (user_id, username, license_key, datetime.now().isoformat(), 'active'))
@@ -62,7 +64,7 @@ def save_user(user_id, username, license_key):
     conn.close()
 
 def save_payment(payment_id, user_id, amount, status):
-    conn = sqlite3.connect('avenddlc.db')
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute('INSERT OR REPLACE INTO payments VALUES (?, ?, ?, ?, ?)',
               (payment_id, user_id, amount, status, datetime.now().isoformat()))
@@ -70,7 +72,7 @@ def save_payment(payment_id, user_id, amount, status):
     conn.close()
 
 def get_user(user_id):
-    conn = sqlite3.connect('avenddlc.db')
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute('SELECT * FROM users WHERE user_id = ?', (user_id,))
     result = c.fetchone()
@@ -80,17 +82,14 @@ def get_user(user_id):
 def generate_license():
     return f"AVEND-MC-{uuid.uuid4().hex[:8].upper()}-{uuid.uuid4().hex[:4].upper()}"
 
-def has_loader():
-    return os.path.exists(LOADER_PATH)
-
 # ============================================
 # КЛАВИАТУРЫ
 # ============================================
 
 def main_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="Купить", callback_data="buy")],
-        [InlineKeyboardButton(text="Скачать лоадер", callback_data="download")]
+        [InlineKeyboardButton(text="💎 Купить (200⭐)", callback_data="buy")],
+        [InlineKeyboardButton(text="📥 Скачать лоадер", callback_data="download")]
     ])
 
 # ============================================
@@ -106,6 +105,8 @@ async def cmd_start(message: types.Message):
 🎮 <b>AvendDLC Minecraft</b>
 <b>🔥 Чит для Minecraft 1.21.8</b>
 <b>💰 Цена: 200 🌟 НАВСЕГДА</b>
+
+👇 Выбери действие:
 """
     await message.answer(text, parse_mode="HTML", reply_markup=main_keyboard())
 
@@ -117,10 +118,6 @@ async def buy_callback(callback: types.CallbackQuery):
     user = get_user(user_id)
     if user:
         await callback.answer("У вас уже есть активная лицензия!", show_alert=True)
-        await callback.message.answer(
-            f"✅ У вас есть лицензия!\n🔑 Ключ: <code>{user[2]}</code>",
-            parse_mode="HTML"
-        )
         return
     
     payment_id = f"PAY_{user_id}_{int(datetime.now().timestamp())}"
@@ -171,29 +168,25 @@ async def successful_payment(message: types.Message):
 
 @dp.callback_query(F.data == "download")
 async def download_callback(callback: types.CallbackQuery):
-    if has_loader():
-        with open(LOADER_PATH, 'rb') as f:
-            await callback.message.reply_document(
-                document=types.BufferedInputFile(f.read(), filename="AvendDLC_Loader.exe"),
-                caption="📥 <b>AvendDLC Loader</b>\n\n"
-                        "1. Запустите от администратора\n"
-                        "2. Авторизуйтесь\n"
-                        "3. Выберите подписку\n"
-                        "4. Наслаждайтесь игрой!"
-                        "⚠️ Обязательно запускайте от имени администратора",
-                parse_mode="HTML"
-            )
-        await callback.answer("✅ Лоадер отправлен!")
-    else:
-        await callback.answer("❌ Лоадер временно недоступен", show_alert=True)
+    await callback.message.answer(
+        f"📥 <b>Скачай лоадер по ссылке:</b>\n\n{LOADER_URL}\n\n"
+        "1. Запустите от администратора\n"
+        "2. Введите лицензионный ключ\n"
+        "3. Нажмите Inject\n"
+        "4. Запустите Minecraft 1.21.8\n\n"
+        "⚠️ Обязательно запускайте от имени администратора",
+        parse_mode="HTML"
+    )
+    await callback.answer()
 
 # ============================================
 # ЗАПУСК
 # ============================================
 
 async def main():
-    init_db()
     print("🤖 Бот запущен!")
+    init_db()
+    print("✅ Бот готов!")
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
