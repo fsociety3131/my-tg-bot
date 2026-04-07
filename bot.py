@@ -3,15 +3,22 @@ import sqlite3
 import uuid
 import asyncio
 from datetime import datetime
-from typing import Dict, Any
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, LabeledPrice
+from telegram.ext import (
+    Application, 
+    CommandHandler, 
+    CallbackQueryHandler, 
+    PreCheckoutQueryHandler,
+    MessageHandler, 
+    filters, 
+    ContextTypes
+)
 
 # ============================================
 # КОНФИГУРАЦИЯ
 # ============================================
-print('Bot Started')
+
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 if not BOT_TOKEN:
     print("❌ BOT_TOKEN не найден в переменных окружения!")
@@ -23,7 +30,7 @@ PRODUCT_NAME = "AvendDLC Minecraft Cheat"
 PRODUCT_DESCRIPTION = "Чит для Minecraft 1.21.8 | Навсегда"
 
 # Путь к лоадеру
-LOADER_PATH = "loader.exe"  # Замени на реальный путь
+LOADER_PATH = "loader.exe"
 
 # ============================================
 # БАЗА ДАННЫХ
@@ -152,7 +159,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     username = query.from_user.username or query.from_user.first_name
     
     if query.data == "buy":
-        # Проверяем, не купил ли уже
         user = get_user(user_id)
         if user:
             await query.edit_message_text(
@@ -175,7 +181,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 • Ссылку на скачивание лоадера
 • Доступ ко всем функциям
 
-Нажми <b>Оплатить</b> для продолжения
+Нажмите кнопку ниже для оплаты
 """
         await query.edit_message_text(
             buy_text,
@@ -184,28 +190,16 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     
     elif query.data == "pay_stars":
-        # Сохраняем платеж
         payment_id = f"PAY_{user_id}_{int(datetime.now().timestamp())}"
         save_payment(payment_id, user_id, PRICE_STARS, "pending")
         
-        # Отправляем инвойс
-        await query.edit_message_text(
-            f"⭐ <b>Оплата через Telegram Stars</b>\n\n"
-            f"Сумма: {PRICE_STARS} 🌟\n"
-            f"Товар: {PRODUCT_NAME}\n\n"
-            f"После оплаты вы получите лицензионный ключ автоматически.\n"
-            f"Нажмите кнопку ниже для оплаты.",
-            parse_mode="HTML"
-        )
-        
-        # Отправляем платежное сообщение
         await context.bot.send_invoice(
             chat_id=user_id,
             title=PRODUCT_NAME,
             description=PRODUCT_DESCRIPTION,
             payload=payment_id,
-            currency="XTR",  # Telegram Stars
-            prices=[LabeledPrice("AvendDLC", PRICE_STARS)],
+            currency="XTR",
+            prices=[LabeledPrice(PRODUCT_NAME, PRICE_STARS)],
             need_name=False,
             need_phone_number=False,
             need_email=False,
@@ -213,10 +207,17 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             is_flexible=False,
             protect_content=True
         )
+        
+        await query.edit_message_text(
+            f"⭐ <b>Платёж отправлен!</b>\n\n"
+            f"Сумма: {PRICE_STARS} 🌟\n"
+            f"Товар: {PRODUCT_NAME}\n\n"
+            f"Подтвердите платёж в появившемся окне.",
+            parse_mode="HTML"
+        )
     
     elif query.data == "download":
         if has_loader():
-            # Отправляем файл
             with open(LOADER_PATH, 'rb') as f:
                 await query.message.reply_document(
                     document=f,
@@ -273,7 +274,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 🔑 <b>Ваш ключ:</b> <code>{user[2]}</code>
 📅 <b>Дата покупки:</b> {user[3]}
-👤 <b>Пользователь:</b> @{username or user[1]}
+👤 <b>Пользователь:</b> @{username}
 ⏱️ <b>Статус:</b> {user[4].upper()}
 📦 <b>Товар:</b> {PRODUCT_NAME}
 
@@ -309,10 +310,10 @@ async def pre_checkout(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.pre_checkout_query
     user_id = query.from_user.id
     
-    # Проверяем валидность платежа
     if query.invoice_payload.startswith("PAY_"):
         await query.answer(ok=True)
         save_payment(query.invoice_payload, user_id, PRICE_STARS, "completed")
+        print(f"✅ Платеж принят: {query.invoice_payload}")
     else:
         await query.answer(ok=False, error_message="Ошибка платежа. Попробуйте снова.")
 
@@ -321,16 +322,10 @@ async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
     user_id = update.effective_user.id
     username = update.effective_user.username or update.effective_user.first_name
     
-    # Генерируем лицензионный ключ
     license_key = generate_license()
-    
-    # Сохраняем пользователя
     save_user(user_id, username, license_key)
-    
-    # Обновляем статус платежа
     save_payment(payment.invoice_payload, user_id, PRICE_STARS, "success")
     
-    # Отправляем ключ
     success_text = f"""
 ✅ <b>Оплата прошла успешно!</b>
 
@@ -367,21 +362,16 @@ async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 def main():
     print("🤖 Запуск AvendDLC Telegram бота...")
-    
-    # Инициализируем БД
     init_db()
     
-    # Создаем приложение
     application = Application.builder().token(BOT_TOKEN).build()
     
-    # Регистрируем обработчики
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CallbackQueryHandler(button_handler))
     application.add_handler(PreCheckoutQueryHandler(pre_checkout))
     application.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment))
     
-    # Запускаем бота
-    print("✅ Бот запущен! Нажми Ctrl+C для остановки")
+    print("✅ Бот запущен!")
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
