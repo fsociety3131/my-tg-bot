@@ -123,7 +123,6 @@ async def buy_callback(callback: types.CallbackQuery):
     user_id = callback.from_user.id
     username = callback.from_user.username or callback.from_user.first_name
     
-    # Проверяем, есть ли уже лицензия
     user = get_user(user_id)
     if user:
         await callback.answer("У вас уже есть активная лицензия!", show_alert=True)
@@ -151,7 +150,6 @@ async def buy_callback(callback: types.CallbackQuery):
     )
     
     await callback.answer()
-    await callback.message.answer(f"💎 Оплата {PRICE_STARS}⭐ отправлена! Подтвердите в появившемся окне.")
 
 @dp.pre_checkout_query()
 async def pre_checkout(pre_checkout_q: PreCheckoutQuery):
