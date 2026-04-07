@@ -9,7 +9,7 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, LabeledPrice, PreCheckoutQuery
 from aiogram.filters import Command
 from aiogram import F
-from aiogram.fsm import State, StatesGroup
+from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.memory import MemoryStorage
 
@@ -63,7 +63,7 @@ def init_db():
             password TEXT,
             license_key TEXT,
             subscription_status TEXT DEFAULT 'inactive',
-            subscription_end DATE,
+            subscription_end TEXT,
             is_admin INTEGER DEFAULT 0,
             created_at TEXT,
             telegram_id INTEGER UNIQUE
@@ -186,14 +186,12 @@ def has_loader():
 # КЛАВИАТУРЫ
 # ============================================
 
-def main_keyboard(is_admin=False):
+def main_keyboard():
     keyboard = [
         [InlineKeyboardButton(text="🔑 Вход", callback_data="login")],
         [InlineKeyboardButton(text="📝 Регистрация", callback_data="register")],
         [InlineKeyboardButton(text="📥 Скачать лоадер", callback_data="download")]
     ]
-    if is_admin:
-        keyboard.append([InlineKeyboardButton(text="👑 Админ панель", callback_data="admin")])
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
 def after_login_keyboard(is_admin=False):
@@ -209,7 +207,6 @@ def after_login_keyboard(is_admin=False):
 def admin_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📊 Все пользователи", callback_data="admin_users")],
-        [InlineKeyboardButton(text="🔍 Найти пользователя", callback_data="admin_find")],
         [InlineKeyboardButton(text="🔙 Назад", callback_data="back")]
     ])
 
@@ -431,13 +428,11 @@ async def admin_users(callback: types.CallbackQuery):
     for u in users:
         admin_tag = " 👑" if u[4] == 1 else ""
         text += f"🆔 {u[0]} | {u[1]}{admin_tag} | {u[2]} | {u[3] or 'Нет'}\n"
+        if len(text) > 3500:
+            text += "\n... и ещё"
+            break
     
     await callback.message.edit_text(text, parse_mode="HTML", reply_markup=admin_keyboard())
-    await callback.answer()
-
-@dp.callback_query(F.data == "admin_find")
-async def admin_find(callback: types.CallbackQuery):
-    await callback.message.answer("Введите логин пользователя для поиска:")
     await callback.answer()
 
 # ============================================
