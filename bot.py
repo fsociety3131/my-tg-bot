@@ -19,7 +19,7 @@ if not BOT_TOKEN:
     exit(1)
 
 PRICE_STARS = 200
-PRODUCT_NAME = "AvendDLC Minecraft Cheat"
+PRODUCT_NAME = "AvendDLC Minecraft"
 PRODUCT_DESCRIPTION = "Чит для Minecraft 1.21.8 | Навсегда"
 
 LOADER_PATH = "loader.exe"
@@ -89,8 +89,8 @@ def has_loader():
 
 def main_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="💎 Купить (200⭐)", callback_data="buy")],
-        [InlineKeyboardButton(text="📥 Скачать лоадер", callback_data="download")]
+        [InlineKeyboardButton(text="Купить", callback_data="buy")],
+        [InlineKeyboardButton(text="Скачать лоадер", callback_data="download")]
     ])
 
 # ============================================
@@ -103,18 +103,9 @@ dp = Dispatcher()
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
     text = """
-🎮 <b>AvendDLC Minecraft Cheat</b>
-
+🎮 <b>AvendDLC Minecraft</b>
 <b>🔥 Чит для Minecraft 1.21.8</b>
-
-<b>⚡ Функции:</b>
-• ESP, Aimbot, Fly, Speed
-• X-Ray, FullBright, NoFall
-• AutoFarm, AntiAFK
-
 <b>💰 Цена: 200 🌟 НАВСЕГДА</b>
-
-👇 Выбери действие:
 """
     await message.answer(text, parse_mode="HTML", reply_markup=main_keyboard())
 
@@ -186,9 +177,9 @@ async def download_callback(callback: types.CallbackQuery):
                 document=types.BufferedInputFile(f.read(), filename="AvendDLC_Loader.exe"),
                 caption="📥 <b>AvendDLC Loader</b>\n\n"
                         "1. Запустите от администратора\n"
-                        "2. Введите лицензионный ключ\n"
-                        "3. Нажмите Inject\n"
-                        "4. Запустите Minecraft 1.21.8\n\n"
+                        "2. Авторизуйтесь\n"
+                        "3. Выберите подписку\n"
+                        "4. Наслаждайтесь игрой!"
                         "⚠️ Обязательно запускайте от имени администратора",
                 parse_mode="HTML"
             )
