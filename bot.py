@@ -19,7 +19,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 # ============================================
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-API_URL = "https://avend.fun/api/index.php"
+API_URL = "http://avend.fun/api/index.php"
 API_KEY = "avend_secret_2024_x9k2m4n6p8q0"
 
 PRICE_STARS = 200
