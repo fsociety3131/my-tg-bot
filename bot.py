@@ -21,7 +21,7 @@ if not BOT_TOKEN:
     print("❌ BOT_TOKEN не найден!")
     exit(1)
 
-API_URL = "https://avend.fun/index.php"
+API_URL = "http://avend.fun/index.php"
 API_KEY = "avend_secret_2024_x9k2m4n6p8q0"
 
 PRICE_STARS = 200
