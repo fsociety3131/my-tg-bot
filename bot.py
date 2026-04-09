@@ -214,7 +214,7 @@ async def back(callback: types.CallbackQuery):
 @dp.callback_query(F.data == "download")
 async def download_callback(callback: types.CallbackQuery):
     await callback.message.answer(
-        f"📥 <b>Скачай лоадер:</b>\n\n{LOADER_URL}\n\n"
+        f"📥 <b>Скачать лоадер:</b>\n\n{LOADER_URL}\n\n",
         parse_mode="HTML"
     )
     await callback.answer()
