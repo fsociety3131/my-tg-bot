@@ -127,9 +127,9 @@ async def cmd_start(message: types.Message):
     except Exception as e:
         logger.error(f"Start error: {e}")
         await message.answer(
-            "🎮 <b>AvendDLC Minecraft</b>\n\n"
-            "🔥 Чит для Minecraft 1.21.8\n\n"
-            "👇 Войди или зарегистрируйся:",
+            "<b>AvendDLC</b>\n\n"
+            "Чит для Minecraft 1.21.8\n\n"
+            "Войди или зарегистрируйся:",
             parse_mode="HTML",
             reply_markup=main_keyboard()
         )
@@ -215,10 +215,6 @@ async def back(callback: types.CallbackQuery):
 async def download_callback(callback: types.CallbackQuery):
     await callback.message.answer(
         f"📥 <b>Скачай лоадер:</b>\n\n{LOADER_URL}\n\n"
-        "1. Запустите от администратора\n"
-        "2. Введите лицензионный ключ\n"
-        "3. Нажмите Inject\n"
-        "4. Запустите Minecraft 1.21.8",
         parse_mode="HTML"
     )
     await callback.answer()
