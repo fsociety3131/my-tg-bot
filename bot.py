@@ -1,9 +1,7 @@
 import os
-import sqlite3
 import uuid
 from datetime import datetime, timedelta
 import asyncio
-import hashlib
 import aiohttp
 
 from aiogram import Bot, Dispatcher, types
@@ -19,7 +17,11 @@ from aiogram.fsm.storage.memory import MemoryStorage
 # ============================================
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-API_URL = "http://avend.fun/api/index.php"
+if not BOT_TOKEN:
+    print("❌ BOT_TOKEN не найден!")
+    exit(1)
+
+API_URL = "http://avend.fun/index.php"
 API_KEY = "avend_secret_2024_x9k2m4n6p8q0"
 
 PRICE_STARS = 200
@@ -51,6 +53,33 @@ class AuthState(StatesGroup):
     waiting_register = State()
 
 # ============================================
+# КЛАВИАТУРЫ
+# ============================================
+
+def main_keyboard():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔑 Вход", callback_data="login")],
+        [InlineKeyboardButton(text="📝 Регистрация", callback_data="register")],
+        [InlineKeyboardButton(text="📥 Скачать лоадер", callback_data="download")]
+    ])
+
+def after_login_keyboard(is_admin=False):
+    kb = [
+        [InlineKeyboardButton(text="💎 Купить подписку (200⭐)", callback_data="buy")],
+        [InlineKeyboardButton(text="📥 Скачать лоадер", callback_data="download")],
+        [InlineKeyboardButton(text="🚪 Выйти", callback_data="logout")]
+    ]
+    if is_admin:
+        kb.append([InlineKeyboardButton(text="👑 Админ панель", callback_data="admin")])
+    return InlineKeyboardMarkup(inline_keyboard=kb)
+
+def admin_keyboard():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📊 Все пользователи", callback_data="admin_users")],
+        [InlineKeyboardButton(text="🔙 Назад", callback_data="back")]
+    ])
+
+# ============================================
 # БОТ
 # ============================================
 
@@ -80,42 +109,25 @@ async def cmd_start(message: types.Message):
             reply_markup=main_keyboard()
         )
 
-def main_keyboard():
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🔑 Вход", callback_data="login")],
-        [InlineKeyboardButton(text="📝 Регистрация", callback_data="register")],
-        [InlineKeyboardButton(text="📥 Скачать лоадер", callback_data="download")]
-    ])
-
-def after_login_keyboard(is_admin=False):
-    kb = [
-        [InlineKeyboardButton(text="💎 Купить подписку (200⭐)", callback_data="buy")],
-        [InlineKeyboardButton(text="📥 Скачать лоадер", callback_data="download")],
-        [InlineKeyboardButton(text="🚪 Выйти", callback_data="logout")]
-    ]
-    if is_admin:
-        kb.append([InlineKeyboardButton(text="👑 Админ панель", callback_data="admin")])
-    return InlineKeyboardMarkup(inline_keyboard=kb)
-
-# ============================================
-# ОБРАБОТЧИКИ ВХОДА/РЕГИСТРАЦИИ
-# ============================================
-
-@dp.callback_query_handler(lambda c: c.data == "login")
+@dp.callback_query(F.data == "login")
 async def login_start(callback: types.CallbackQuery, state: FSMContext):
-    await callback.message.answer("🔑 Введите логин и пароль в формате:\n`логин:пароль`")
+    await callback.message.answer("🔑 Введите логин и пароль в формате:\n`логин:пароль`", parse_mode="Markdown")
     await state.set_state(AuthState.waiting_login)
     await callback.answer()
 
-@dp.callback_query_handler(lambda c: c.data == "register")
+@dp.callback_query(F.data == "register")
 async def register_start(callback: types.CallbackQuery, state: FSMContext):
-    await callback.message.answer("📝 Введите логин и пароль в формате:\n`логин:пароль`")
+    await callback.message.answer("📝 Введите логин и пароль в формате:\n`логин:пароль`", parse_mode="Markdown")
     await state.set_state(AuthState.waiting_register)
     await callback.answer()
 
 @dp.message(AuthState.waiting_login)
 async def process_login(message: types.Message, state: FSMContext):
     try:
+        if ":" not in message.text:
+            await message.answer("❌ Неверный формат. Используйте: `логин:пароль`", parse_mode="Markdown")
+            return
+        
         login, password = message.text.split(":", 1)
         result = await api_request('login', {
             'login': login,
@@ -134,12 +146,17 @@ async def process_login(message: types.Message, state: FSMContext):
         else:
             await message.answer("❌ Неверный логин или пароль")
         await state.clear()
-    except:
-        await message.answer("❌ Неверный формат. Используйте: `логин:пароль`")
+    except Exception as e:
+        await message.answer("❌ Неверный формат. Используйте: `логин:пароль`", parse_mode="Markdown")
+        await state.clear()
 
 @dp.message(AuthState.waiting_register)
 async def process_register(message: types.Message, state: FSMContext):
     try:
+        if ":" not in message.text:
+            await message.answer("❌ Неверный формат. Используйте: `логин:пароль`", parse_mode="Markdown")
+            return
+        
         login, password = message.text.split(":", 1)
         result = await api_request('register', {
             'login': login,
@@ -152,15 +169,21 @@ async def process_register(message: types.Message, state: FSMContext):
         else:
             await message.answer(f"❌ {result.get('error', 'Ошибка регистрации')}")
         await state.clear()
-    except:
-        await message.answer("❌ Неверный формат. Используйте: `логин:пароль`")
+    except Exception as e:
+        await message.answer("❌ Неверный формат. Используйте: `логин:пароль`", parse_mode="Markdown")
+        await state.clear()
 
-@dp.callback_query_handler(lambda c: c.data == "logout")
+@dp.callback_query(F.data == "logout")
 async def logout(callback: types.CallbackQuery):
     await callback.message.answer("🚪 Вы вышли. Для входа нажмите /start", reply_markup=main_keyboard())
     await callback.answer()
 
-@dp.callback_query_handler(lambda c: c.data == "download")
+@dp.callback_query(F.data == "back")
+async def back(callback: types.CallbackQuery):
+    await callback.message.edit_text("🎮 Главное меню:", reply_markup=main_keyboard())
+    await callback.answer()
+
+@dp.callback_query(F.data == "download")
 async def download_callback(callback: types.CallbackQuery):
     await callback.message.answer(
         f"📥 <b>Скачай лоадер:</b>\n\n{LOADER_URL}\n\n"
@@ -170,6 +193,82 @@ async def download_callback(callback: types.CallbackQuery):
         "4. Запустите Minecraft 1.21.8",
         parse_mode="HTML"
     )
+    await callback.answer()
+
+@dp.callback_query(F.data == "buy")
+async def buy_callback(callback: types.CallbackQuery):
+    user = await api_request('check_subscription', {'telegram_id': callback.from_user.id})
+    
+    if not user.get('success'):
+        await callback.answer("Сначала войдите в систему!", show_alert=True)
+        return
+    
+    if user.get('subscription_status') == 'active':
+        await callback.answer("У вас уже есть активная подписка!", show_alert=True)
+        return
+    
+    payment_id = f"PAY_{callback.from_user.id}_{int(datetime.now().timestamp())}"
+    await api_request('create_payment', {
+        'payment_id': payment_id,
+        'user_id': callback.from_user.id,
+        'amount': PRICE_STARS
+    })
+    
+    await bot.send_invoice(
+        chat_id=callback.from_user.id,
+        title=PRODUCT_NAME,
+        description=PRODUCT_DESCRIPTION,
+        payload=payment_id,
+        currency="XTR",
+        prices=[LabeledPrice(label=PRODUCT_NAME, amount=PRICE_STARS)],
+        start_parameter="avenddlc_payment",
+        need_name=False,
+        need_phone_number=False,
+        need_email=False,
+        need_shipping_address=False
+    )
+    await callback.answer()
+
+@dp.pre_checkout_query()
+async def pre_checkout(pre_checkout_q: PreCheckoutQuery):
+    if pre_checkout_q.invoice_payload.startswith("PAY_"):
+        await pre_checkout_q.answer(ok=True)
+        await api_request('confirm_payment', {'payment_id': pre_checkout_q.invoice_payload})
+        print(f"✅ Платёж принят: {pre_checkout_q.invoice_payload}")
+    else:
+        await pre_checkout_q.answer(ok=False, error_message="Ошибка платежа")
+
+@dp.message(F.successful_payment)
+async def successful_payment(message: types.Message):
+    payment = message.successful_payment
+    result = await api_request('confirm_payment', {'payment_id': payment.invoice_payload})
+    
+    if result.get('success'):
+        license_key = result.get('license_key', '')
+        await message.answer(
+            f"✅ <b>Оплата прошла успешно!</b>\n\n"
+            f"🔑 <b>Твой ключ:</b> <code>{license_key}</code>\n\n"
+            f"📥 Нажми «Скачать лоадер» в главном меню",
+            parse_mode="HTML",
+            reply_markup=after_login_keyboard()
+        )
+
+# ============================================
+# АДМИН ПАНЕЛЬ
+# ============================================
+
+@dp.callback_query(F.data == "admin")
+async def admin_panel(callback: types.CallbackQuery):
+    await callback.message.edit_text(
+        "👑 <b>Админ панель</b>\n\nВыберите действие:",
+        parse_mode="HTML",
+        reply_markup=admin_keyboard()
+    )
+    await callback.answer()
+
+@dp.callback_query(F.data == "admin_users")
+async def admin_users(callback: types.CallbackQuery):
+    await callback.message.edit_text("📊 Список пользователей:\n(функция в разработке)", reply_markup=admin_keyboard())
     await callback.answer()
 
 # ============================================
