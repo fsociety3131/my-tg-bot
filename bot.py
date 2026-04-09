@@ -3,6 +3,7 @@ import uuid
 from datetime import datetime, timedelta
 import asyncio
 import aiohttp
+import logging
 
 from aiogram import Bot, Dispatcher, types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, LabeledPrice, PreCheckoutQuery
@@ -11,6 +12,10 @@ from aiogram import F
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.memory import MemoryStorage
+
+# Логирование
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # ============================================
 # КОНФИГУРАЦИЯ
@@ -35,14 +40,24 @@ LOADER_URL = "https://avend.fun/loader.exe"
 # ============================================
 
 async def api_request(method: str, data: dict = None):
-    async with aiohttp.ClientSession() as session:
-        headers = {
-            'Content-Type': 'application/json',
-            'X-Auth-Token': API_KEY
-        }
-        params = {'method': method}
-        async with session.post(API_URL, params=params, json=data or {}, headers=headers) as resp:
-            return await resp.json()
+    try:
+        async with aiohttp.ClientSession() as session:
+            headers = {
+                'Content-Type': 'application/json',
+                'X-Auth-Token': API_KEY
+            }
+            params = {'method': method}
+            async with session.post(API_URL, params=params, json=data or {}, headers=headers, timeout=10) as resp:
+                if resp.status == 200:
+                    result = await resp.json()
+                    logger.info(f"API {method} success: {result}")
+                    return result
+                else:
+                    logger.error(f"API error: {resp.status}")
+                    return None
+    except Exception as e:
+        logger.error(f"API request error: {e}")
+        return None
 
 # ============================================
 # FSM СОСТОЯНИЯ
@@ -89,18 +104,28 @@ dp = Dispatcher(storage=storage)
 
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
-    user = await api_request('check_subscription', {'telegram_id': message.from_user.id})
-    
-    if user.get('success') and user.get('subscription_status') == 'active':
-        await message.answer(
-            f"👋 С возвращением!\n"
-            f"📅 Статус: ✅ Активна\n"
-            f"⏱️ Действует до: {user.get('subscription_end', 'Не указано')}\n"
-            f"🔑 Ключ: <code>{user.get('license_key', 'Нет')}</code>",
-            parse_mode="HTML",
-            reply_markup=after_login_keyboard()
-        )
-    else:
+    try:
+        user = await api_request('check_subscription', {'telegram_id': message.from_user.id})
+        
+        if user and user.get('success') and user.get('subscription_status') == 'active':
+            await message.answer(
+                f"👋 С возвращением!\n"
+                f"📅 Статус: ✅ Активна\n"
+                f"⏱️ Действует до: {user.get('subscription_end', 'Не указано')}\n"
+                f"🔑 Ключ: <code>{user.get('license_key', 'Нет')}</code>",
+                parse_mode="HTML",
+                reply_markup=after_login_keyboard()
+            )
+        else:
+            await message.answer(
+                "🎮 <b>AvendDLC Minecraft</b>\n\n"
+                "🔥 Чит для Minecraft 1.21.8\n\n"
+                "👇 Войди или зарегистрируйся:",
+                parse_mode="HTML",
+                reply_markup=main_keyboard()
+            )
+    except Exception as e:
+        logger.error(f"Start error: {e}")
         await message.answer(
             "🎮 <b>AvendDLC Minecraft</b>\n\n"
             "🔥 Чит для Minecraft 1.21.8\n\n"
@@ -135,18 +160,19 @@ async def process_login(message: types.Message, state: FSMContext):
             'telegram_id': message.from_user.id
         })
         
-        if result.get('success'):
+        if result and result.get('success'):
             user = result['user']
             await message.answer(
                 f"✅ Добро пожаловать, {login}!\n"
-                f"📅 Статус: {'✅ Активна' if user['subscription_status'] == 'active' else '❌ Не активна'}\n"
-                f"⏱️ Действует до: {user['subscription_end'] or 'Не куплена'}",
+                f"📅 Статус: {'✅ Активна' if user.get('subscription_status') == 'active' else '❌ Не активна'}\n"
+                f"⏱️ Действует до: {user.get('subscription_end') or 'Не куплена'}",
                 reply_markup=after_login_keyboard(is_admin=user.get('is_admin', 0) == 1)
             )
         else:
             await message.answer("❌ Неверный логин или пароль")
         await state.clear()
     except Exception as e:
+        logger.error(f"Login error: {e}")
         await message.answer("❌ Неверный формат. Используйте: `логин:пароль`", parse_mode="Markdown")
         await state.clear()
 
@@ -164,12 +190,14 @@ async def process_register(message: types.Message, state: FSMContext):
             'telegram_id': message.from_user.id
         })
         
-        if result.get('success'):
+        if result and result.get('success'):
             await message.answer(f"✅ Регистрация прошла успешно!\nДобро пожаловать, {login}!", reply_markup=after_login_keyboard())
         else:
-            await message.answer(f"❌ {result.get('error', 'Ошибка регистрации')}")
+            error_msg = result.get('error', 'Ошибка регистрации') if result else 'Ошибка соединения с API'
+            await message.answer(f"❌ {error_msg}")
         await state.clear()
     except Exception as e:
+        logger.error(f"Register error: {e}")
         await message.answer("❌ Неверный формат. Используйте: `логин:пароль`", parse_mode="Markdown")
         await state.clear()
 
@@ -197,44 +225,48 @@ async def download_callback(callback: types.CallbackQuery):
 
 @dp.callback_query(F.data == "buy")
 async def buy_callback(callback: types.CallbackQuery):
-    user = await api_request('check_subscription', {'telegram_id': callback.from_user.id})
-    
-    if not user.get('success'):
-        await callback.answer("Сначала войдите в систему!", show_alert=True)
-        return
-    
-    if user.get('subscription_status') == 'active':
-        await callback.answer("У вас уже есть активная подписка!", show_alert=True)
-        return
-    
-    payment_id = f"PAY_{callback.from_user.id}_{int(datetime.now().timestamp())}"
-    await api_request('create_payment', {
-        'payment_id': payment_id,
-        'user_id': callback.from_user.id,
-        'amount': PRICE_STARS
-    })
-    
-    await bot.send_invoice(
-        chat_id=callback.from_user.id,
-        title=PRODUCT_NAME,
-        description=PRODUCT_DESCRIPTION,
-        payload=payment_id,
-        currency="XTR",
-        prices=[LabeledPrice(label=PRODUCT_NAME, amount=PRICE_STARS)],
-        start_parameter="avenddlc_payment",
-        need_name=False,
-        need_phone_number=False,
-        need_email=False,
-        need_shipping_address=False
-    )
-    await callback.answer()
+    try:
+        user = await api_request('check_subscription', {'telegram_id': callback.from_user.id})
+        
+        if not user or not user.get('success'):
+            await callback.answer("Сначала войдите в систему!", show_alert=True)
+            return
+        
+        if user.get('subscription_status') == 'active':
+            await callback.answer("У вас уже есть активная подписка!", show_alert=True)
+            return
+        
+        payment_id = f"PAY_{callback.from_user.id}_{int(datetime.now().timestamp())}"
+        await api_request('create_payment', {
+            'payment_id': payment_id,
+            'user_id': callback.from_user.id,
+            'amount': PRICE_STARS
+        })
+        
+        await bot.send_invoice(
+            chat_id=callback.from_user.id,
+            title=PRODUCT_NAME,
+            description=PRODUCT_DESCRIPTION,
+            payload=payment_id,
+            currency="XTR",
+            prices=[LabeledPrice(label=PRODUCT_NAME, amount=PRICE_STARS)],
+            start_parameter="avenddlc_payment",
+            need_name=False,
+            need_phone_number=False,
+            need_email=False,
+            need_shipping_address=False
+        )
+        await callback.answer()
+    except Exception as e:
+        logger.error(f"Buy error: {e}")
+        await callback.answer("Ошибка при покупке", show_alert=True)
 
 @dp.pre_checkout_query()
 async def pre_checkout(pre_checkout_q: PreCheckoutQuery):
     if pre_checkout_q.invoice_payload.startswith("PAY_"):
         await pre_checkout_q.answer(ok=True)
         await api_request('confirm_payment', {'payment_id': pre_checkout_q.invoice_payload})
-        print(f"✅ Платёж принят: {pre_checkout_q.invoice_payload}")
+        logger.info(f"✅ Платёж принят: {pre_checkout_q.invoice_payload}")
     else:
         await pre_checkout_q.answer(ok=False, error_message="Ошибка платежа")
 
@@ -243,7 +275,7 @@ async def successful_payment(message: types.Message):
     payment = message.successful_payment
     result = await api_request('confirm_payment', {'payment_id': payment.invoice_payload})
     
-    if result.get('success'):
+    if result and result.get('success'):
         license_key = result.get('license_key', '')
         await message.answer(
             f"✅ <b>Оплата прошла успешно!</b>\n\n"
