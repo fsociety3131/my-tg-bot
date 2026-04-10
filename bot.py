@@ -40,6 +40,8 @@ LOADER_URL = "https://avend.fun/loader.exe"
 
 async def api_request(method: str, data: dict = None):
     try:
+        print(f"DEBUG: Request to {method} with data: {data}")
+        
         async with aiohttp.ClientSession() as session:
             headers = {
                 'Content-Type': 'application/x-www-form-urlencoded',
@@ -47,10 +49,14 @@ async def api_request(method: str, data: dict = None):
             }
             params = {'method': method}
             async with session.post(API_URL, params=params, data=data or {}, headers=headers, timeout=10) as resp:
+                text = await resp.text()
+                print(f"DEBUG: Response: {text}")
+                
                 if resp.status == 200:
-                    result = await resp.json()
-                    logger.info(f"API {method} success: {result}")
-                    return result
+                    try:
+                        return await resp.json()
+                    except:
+                        return None
                 else:
                     logger.error(f"API error: {resp.status}")
                     return None
