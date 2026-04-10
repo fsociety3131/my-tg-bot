@@ -13,7 +13,6 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.memory import MemoryStorage
 
-# Логирование
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -36,18 +35,18 @@ PRODUCT_DESCRIPTION = "Чит для Minecraft 1.21.8 | Навсегда"
 LOADER_URL = "https://avend.fun/loader.exe"
 
 # ============================================
-# HTTP ЗАПРОСЫ К API
+# HTTP ЗАПРОСЫ К API (x-www-form-urlencoded)
 # ============================================
 
 async def api_request(method: str, data: dict = None):
     try:
         async with aiohttp.ClientSession() as session:
             headers = {
-                'Content-Type': 'application/json',
+                'Content-Type': 'application/x-www-form-urlencoded',
                 'X-Auth-Token': API_KEY
             }
             params = {'method': method}
-            async with session.post(API_URL, params=params, json=data or {}, headers=headers, timeout=10) as resp:
+            async with session.post(API_URL, params=params, data=data or {}, headers=headers, timeout=10) as resp:
                 if resp.status == 200:
                     result = await resp.json()
                     logger.info(f"API {method} success: {result}")
@@ -305,7 +304,7 @@ async def admin_users(callback: types.CallbackQuery):
 
 async def main():
     print("🤖 AvendDLC бот запущен!")
-    print("✅ API подключён к https://avend.fun/api/")
+    print("✅ API подключён к http://avend.fun")
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
